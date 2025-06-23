@@ -43,3 +43,4 @@ Thumbs.db
 
 src/environments/*
 *environments*
+/src/environments/
