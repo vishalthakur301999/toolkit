@@ -32,6 +32,9 @@
               }
             ],
             "styles": [
+              "node_modules/primeicons/primeicons.css",
+              "node_modules/primeflex/primeflex.css",
+              "src/tailwind.css",
               "src/styles.scss"
             ],
             "scripts": [],
