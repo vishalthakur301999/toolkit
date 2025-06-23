@@ -1,0 +1,23 @@
+<div class="flex h-screen bg-surface-100">
+  <aside class="w-64 bg-surface-0 shadow-md">
+    <div class="p-5 border-b border-surface-200">
+      <h1 class="text-2xl font-bold text-primary-500">Toolkit App</h1>
+    </div>
+    <nav class="mt-5">
+      <a routerLink="/notes" routerLinkActive="bg-primary-50 text-primary-700"
+         class="flex items-center px-5 py-3 text-surface-600 hover:bg-surface-50">
+        <i class="pi pi-book mr-3"></i>
+        Notes
+      </a>
+      <a routerLink="/calendar" routerLinkActive="bg-primary-50 text-primary-700"
+         class="flex items-center px-5 py-3 text-surface-600 hover:bg-surface-50">
+        <i class="pi pi-calendar mr-3"></i>
+        Calendar
+      </a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-6 overflow-y-auto">
+    <router-outlet></router-outlet>
+  </main>
+</div>

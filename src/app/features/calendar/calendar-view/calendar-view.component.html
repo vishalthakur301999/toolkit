@@ -1,0 +1,11 @@
+<div class="p-fluid">
+  <p-card header="My Calendar">
+    <p-calendar [(ngModel)]="date" [inline]="true" [showWeek]="true"></p-calendar>
+  </p-card>
+</div>
+
+<div class="mt-4">
+  <p-card *ngIf="date" header="Selected Date">
+    <p>{{ date | date: 'fullDate' }}</p>
+  </p-card>
+</div>
