@@ -1,15 +1,44 @@
-<div class="p-fluid">
-  <p-card header="My Notes">
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div class="p-4 border rounded-lg shadow bg-surface-0">
-        <h3 class="text-lg font-semibold text-primary-700 mb-2">Note Title</h3>
-        <p class="text-surface-600">This is the content of the note. It can be a bit longer to see how it wraps.</p>
-      </div>
+<p-toast></p-toast>
+<p-confirmdialog></p-confirmdialog>
 
-    </div>
-
-    <ng-template pTemplate="footer">
-      <p-button label="Add Note" icon="pi pi-plus"></p-button>
-    </ng-template>
-  </p-card>
+<div class="flex justify-between items-center mb-4">
+  <h2 class="text-2xl font-semibold">My Encrypted Notes</h2>
+  <p-button
+    label="Set/Change Key"
+    icon="pi pi-key"
+    (click)="promptForKeyAndLoad()"
+    styleClass="p-button-secondary p-button-sm">
+  </p-button>
 </div>
+
+<div *ngIf="isLoading" class="flex justify-center items-center py-8">
+  <p-progressSpinner ariaLabel="loading"></p-progressSpinner>
+</div>
+
+<ng-container *ngIf="!isLoading">
+  <div *ngIf="notes.length === 0" class="text-center py-8 rounded-lg bg-surface-card border border-surface-border">
+    <p class="text-lg text-surface-400">No notes found.</p>
+    <p class="text-sm text-surface-500 mt-2">Set your encryption key to load or add your first note.</p>
+  </div>
+
+  <div *ngIf="notes.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <button (click)="showAddNoteDialog()" class="flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-lg bg-surface-card hover:bg-surface-hover hover:border-primary-500 transition-colors duration-200 min-h-48">
+      <i class="pi pi-plus text-4xl text-surface-400"></i>
+      <span class="mt-2 text-surface-400">Add Note</span>
+    </button>
+
+    <div *ngFor="let note of notes" class="p-4 rounded-lg bg-surface-card flex flex-col justify-between min-h-48">
+      <div>
+        <h3 class="text-lg font-semibold text-primary-400 mb-2 truncate">{{ note.title }}</h3>
+        <p class="text-surface-300 whitespace-pre-wrap text-sm break-words">{{ note.content }}</p>
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <p-button icon="pi pi-pencil" styleClass="p-button-text p-button-sm" (click)="showEditNoteDialog(note)"></p-button>
+        <p-button icon="pi pi-trash" styleClass="p-button-text p-button-sm p-button-danger" (click)="confirmDelete(note.id)"></p-button>
+      </div>
+    </div>
+  </div>
+</ng-container>
+
+<p-dialog [(visible)]="displayDialog" [modal]="true" header="{{ currentNoteId ? 'Edit Note' : 'Add Note' }}" [style]="{ width: '90vw', 'max-width': '600px' }">
+</p-dialog>

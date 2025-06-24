@@ -1,1 +1,13 @@
 /* You can add global styles to this file, and also import other style files */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+// Set the theme background and text color for the entire app
+body, html {
+  height: 100%;
+  // Use the PrimeNG variable for the main surface background
+  background-color: var(--p-surface-ground);
+  // Use the PrimeNG variable for the default text color
+  color: var(--p-text-color);
+}

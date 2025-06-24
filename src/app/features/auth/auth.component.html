@@ -1,0 +1,30 @@
+<p-toast></p-toast>
+<div class="flex justify-center items-center h-full">
+  <p-card [header]="isSigningIn ? 'Sign In' : 'Sign Up'" styleClass="w-full max-w-md">
+    <form [formGroup]="authForm" (ngSubmit)="onSubmit()">
+      <div class="flex flex-col gap-4">
+        <div>
+          <label for="email" class="block mb-2">Email</label>
+          <input pInputText id="email" formControlName="email" class="w-full" />
+        </div>
+        <div>
+          <label for="password" class="block mb-2">Password</label>
+          <input pInputText id="password" type="password" formControlName="password" class="w-full" />
+        </div>
+        <p-button type="submit" [label]="isSigningIn ? 'Sign In' : 'Sign Up'" [loading]="isLoading" styleClass="w-full"></p-button>
+      </div>
+    </form>
+
+    <p-divider align="center" styleClass="my-6">
+      <b>OR</b>
+    </p-divider>
+
+    <p-button label="Continue with Passkey" icon="pi pi-fingerprint" (click)="onSignInWithPasskey()" styleClass="w-full p-button-secondary"></p-button>
+
+    <div class="mt-6 text-center">
+      <a (click)="toggleAuthMode()" class="cursor-pointer text-primary-500 hover:underline">
+        {{ isSigningIn ? 'Need an account? Sign Up' : 'Already have an account? Sign In' }}
+      </a>
+    </div>
+  </p-card>
+</div>

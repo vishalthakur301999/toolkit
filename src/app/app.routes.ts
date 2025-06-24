@@ -1,22 +1,28 @@
 import { Routes } from '@angular/router';
 import { MainLayoutComponent } from './layout/main-layout/main-layout.component';
+import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   {
+    path: 'auth',
+    loadComponent: () => import('./features/auth/auth.component').then(m => m.AuthComponent)
+  },
+  {
     path: '',
     component: MainLayoutComponent,
+    canActivate: [authGuard], // Protect the main layout and its children
     children: [
       { path: '', redirectTo: 'notes', pathMatch: 'full' },
       {
         path: 'notes',
-        // Lazy-load the NotesListComponent directly
         loadComponent: () => import('./features/notes/notes-list/notes-list.component').then(m => m.NotesListComponent)
       },
       {
         path: 'calendar',
-        // Lazy-load the CalendarViewComponent directly
         loadComponent: () => import('./features/calendar/calendar-view/calendar-view.component').then(m => m.CalendarViewComponent)
       }
     ]
-  }
+  },
+  // Redirect any other path to auth if not logged in, or notes if logged in
+  { path: '**', redirectTo: '' }
 ];

@@ -1,21 +1,18 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  // The 'dark' mode using 'class' will allow us to toggle dark mode if needed later.
+  // For now, the theme will control it.
+  darkMode: 'class',
   content: [
     "./src/**/*.{html,ts}",
   ],
   theme: {
     extend: {
-      colors: {
-        'primary-50': 'rgb(var(--primary-50))',
-        'primary-100': 'rgb(var(--primary-100))',
-        // ... (include all primary and surface colors as before)
-        'primary-950': 'rgb(var(--primary-950))',
-        'surface-0': 'rgb(var(--surface-0))',
-        'surface-50': 'rgb(var(--surface-50))',
-        // ... (include all surface colors as before)
-        'surface-950': 'rgb(var(--surface-950))'
-      }
+      // We let the tailwindcss-primeui plugin handle the colors now
     }
   },
-  plugins: [],
+  plugins: [
+    // Ensure the plugin is registered
+    require('tailwindcss-primeui')
+  ],
 };

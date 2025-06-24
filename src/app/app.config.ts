@@ -7,6 +7,7 @@ import { provideClientHydration, withEventReplay } from '@angular/platform-brows
 
 import { providePrimeNG } from 'primeng/config';
 import Aura from '@primeng/themes/aura';
+import {MessageService} from 'primeng/api';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -14,10 +15,12 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideClientHydration(withEventReplay()),
     provideAnimations(),
+    MessageService,
     providePrimeNG({
       theme: {
         preset: Aura,
         options: {
+          prefix: 'p',
           cssLayer: { name: 'primeng' } // optional tweaks
         }
       }
