@@ -1,16 +1,17 @@
 import { Routes } from '@angular/router';
 import { MainLayoutComponent } from './layout/main-layout/main-layout.component';
-import { authGuard } from './core/guards/auth.guard';
+import {descopeAuthGuard} from '@descope/angular-sdk';
+
 
 export const routes: Routes = [
   {
-    path: 'auth',
-    loadComponent: () => import('./features/auth/auth.component').then(m => m.AuthComponent)
+    path: 'login',
+    loadComponent: () => import('./features/login/login.component').then(m => m.LoginComponent)
   },
   {
     path: '',
     component: MainLayoutComponent,
-    canActivate: [authGuard], // Protect the main layout and its children
+    canActivate: [descopeAuthGuard], // Use the new Descope guard
     children: [
       { path: '', redirectTo: 'notes', pathMatch: 'full' },
       {
@@ -23,6 +24,6 @@ export const routes: Routes = [
       }
     ]
   },
-  // Redirect any other path to auth if not logged in, or notes if logged in
   { path: '**', redirectTo: '' }
 ];
+

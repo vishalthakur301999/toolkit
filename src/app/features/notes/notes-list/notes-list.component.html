@@ -3,16 +3,19 @@
 
 <div class="flex justify-between items-center mb-4">
   <h2 class="text-2xl font-semibold">My Encrypted Notes</h2>
+  <!-- CORRECTED: This button now calls loadNotes(), which exists -->
   <p-button
-    label="Set/Change Key"
-    icon="pi pi-key"
-    (click)="promptForKeyAndLoad()"
+    label="Reload Notes"
+    icon="pi pi-refresh"
+    (click)="loadNotes()"
     styleClass="p-button-secondary p-button-sm">
   </p-button>
 </div>
 
-<div *ngIf="isLoading" class="flex justify-center items-center py-8">
-  <p-progressSpinner ariaLabel="loading"></p-progressSpinner>
+<div *ngIf="needsToSetup && !isLoading" class="text-center py-8 rounded-lg bg-primary-950 border border-primary-800">
+  <h3 class="text-lg font-semibold text-primary-300">Welcome! Let's secure your notes.</h3>
+  <p class="text-sm text-surface-400 mt-2 mb-4">To enable end-to-end encryption, you need to create a Master Password.<br>This password cannot be recovered, so please store it somewhere safe.</p>
+  <p-button label="Create Master Password" icon="pi pi-key" (click)="setupMasterPassword()"></p-button>
 </div>
 
 <ng-container *ngIf="!isLoading">

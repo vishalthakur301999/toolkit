@@ -52,7 +52,7 @@ export class CryptoService {
   async encrypt(
     content: string,
     password: string
-  ): Promise<{ encryptedContent: string; iv: string; salt: string }> {
+  ): Promise<{ encryptedContent: string; iv: string; salt: string }> { // Return type updated
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const key = await this.getKey(password, salt);
@@ -65,7 +65,7 @@ export class CryptoService {
 
     return {
       encryptedContent: bufferToBase64(encryptedContent),
-      iv: bufferToBase64(iv),
+      iv: bufferToBase64(iv), // Return the iv
       salt: bufferToBase64(salt),
     };
   }

@@ -1,8 +1,12 @@
-import {Component, OnInit, inject, afterNextRender, NgZone} from '@angular/core'; // No OnDestroy needed now
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-
-// PrimeNG Modules...
+import { Subject, takeUntil, combineLatest, switchMap, of } from 'rxjs';
+import {DescopeAuthService, DescopeUser} from '@descope/angular-sdk';
+// CORRECTED: Import UserResponse and the DescopeSession type correctly
+import type { UserResponse } from '@descope/web-js-sdk';
+import { DescopeSession } from '@descope/angular-sdk';
+// PrimeNG Modules
 import { CardModule } from 'primeng/card';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -14,9 +18,8 @@ import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 
 // App Services
-import {SupabaseService, NoteDbo, EncryptedDekDbo} from '../../../core/services/supabase.service';
+import { SupabaseService, NoteDbo, EncryptedDekDbo } from '../../../core/services/supabase.service';
 import { CryptoService } from '../../../core/services/crypto.service';
-import {Subject, takeUntil} from 'rxjs';
 
 export interface Note {
   id: string;
@@ -28,66 +31,57 @@ export interface Note {
   selector: 'app-notes-list',
   standalone: true,
   imports: [
-    CommonModule,
-    ReactiveFormsModule,
-    CardModule,
-    ButtonModule,
-    DialogModule,
-    InputTextModule,
-    TextareaModule,
-    ToastModule,
-    ConfirmDialogModule,
-    ProgressSpinnerModule
+    CommonModule, ReactiveFormsModule, CardModule, ButtonModule, DialogModule,
+    InputTextModule, TextareaModule, ToastModule, ConfirmDialogModule, ProgressSpinnerModule
   ],
   providers: [ConfirmationService, MessageService],
   templateUrl: './notes-list.component.html',
   styleUrl: './notes-list.component.scss'
 })
-export class NotesListComponent implements OnInit {
-  // Injected services...
+export class NotesListComponent implements OnInit, OnDestroy {
+  // Injected services
   private fb = inject(FormBuilder);
   private supabaseService = inject(SupabaseService);
   private cryptoService = inject(CryptoService);
+  private descopeService = inject(DescopeAuthService);
   private confirmationService = inject(ConfirmationService);
   private messageService = inject(MessageService);
-  private zone = inject(NgZone); // Inject NgZone
-  private destroy$ = new Subject<void>();
-  private dataKey = ''; // The plaintext Data Encryption Key
 
-  // State Management Properties
+  private destroy$ = new Subject<void>();
+  private dataKey = '';
+
+  // State
   notes: Note[] = [];
   isLoading = true;
   needsToSetup = false;
 
-  // Form and Dialog Properties
+  // Form and Dialog
   noteForm!: FormGroup;
   displayDialog = false;
   isSaving = false;
   currentNoteId: string | null = null;
-  encryptionKey = '';
 
-  constructor() {}
+  private currentSession: DescopeSession | null = null;
+  private currentUser: DescopeUser | null = null;
 
   ngOnInit(): void {
     this.noteForm = this.fb.group({
       title: ['', Validators.required],
       content: ['', Validators.required],
     });
-    setTimeout(() => this.promptForKeyAndLoad(true), 0);
-    this.supabaseService.currentUser$
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(user => {
-        if (user) {
-          // User is logged in, start the key retrieval process
-          this.initializeNotes();
-        } else {
-          // User is logged out, clear the state
-          this.isLoading = false;
-          this.notes = [];
-          this.dataKey = '';
-          sessionStorage.removeItem('noteDataKey');
-        }
-      });
+
+    this.descopeService.session$.pipe(takeUntil(this.destroy$)).subscribe(session => {
+      this.currentSession = session;
+      if (session?.isAuthenticated) {
+        this.initializeNotes();
+      } else {
+        this.cleanupState();
+      }
+    });
+
+    this.descopeService.user$.pipe(takeUntil(this.destroy$)).subscribe(user => {
+      this.currentUser = user;
+    });
   }
 
   ngOnDestroy(): void {
@@ -95,58 +89,69 @@ export class NotesListComponent implements OnInit {
     this.destroy$.complete();
   }
 
+  cleanupState(): void {
+    this.isLoading = false;
+    this.notes = [];
+    this.dataKey = '';
+    this.currentSession = null;
+    this.currentUser = null;
+    sessionStorage.removeItem('noteDataKey');
+  }
+
   async initializeNotes(): Promise<void> {
+    const sessionToken = this.currentSession?.sessionToken;
+    if (!sessionToken) return;
     this.isLoading = true;
     const sessionKey = sessionStorage.getItem('noteDataKey');
-
     if (sessionKey) {
       this.dataKey = sessionKey;
       await this.loadNotes();
       return;
     }
-
-    // If no key in session, check the database
-    const dekDbo = await this.supabaseService.getEncryptedDek();
+    const dekDbo = await this.supabaseService.getEncryptedDek(sessionToken);
     if (dekDbo) {
-      // Key exists in DB, prompt for master password to unlock it
-      const masterPassword = window.prompt("Please enter your Master Password to unlock your notes:");
-      if (!masterPassword) {
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Master Password is required.' });
-        this.isLoading = false;
-        return;
-      }
-      try {
-        this.dataKey = await this.cryptoService.decrypt(dekDbo.encrypted_dek,'', dekDbo.salt, masterPassword);
-        sessionStorage.setItem('noteDataKey', this.dataKey);
-        await this.loadNotes();
-      } catch (e) {
-        this.messageService.add({ severity: 'error', summary: 'Decryption Failed', detail: 'Incorrect Master Password.' });
-        this.isLoading = false;
-      }
+      await this.promptForMasterPasswordAndUnlock(dekDbo);
     } else {
-      // First time user, needs to set up their master password and key
       this.isLoading = false;
       this.needsToSetup = true;
     }
   }
 
+  async promptForMasterPasswordAndUnlock(dekDbo: EncryptedDekDbo): Promise<void> {
+    const masterPassword = window.prompt("Please enter your Master Password to unlock your notes:");
+    if (!masterPassword) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Master Password is required.' });
+      this.isLoading = false;
+      return;}
+    try {
+      this.dataKey = await this.cryptoService.decrypt(dekDbo.encrypted_dek, dekDbo.iv, dekDbo.salt, masterPassword);
+      sessionStorage.setItem('noteDataKey', this.dataKey);
+      await this.loadNotes();
+    } catch (e) {
+      this.messageService.add({ severity: 'error', summary: 'Decryption Failed', detail: 'Incorrect Master Password.' });
+      this.isLoading = false;
+    }
+  }
+
+
   async setupMasterPassword(): Promise<void> {
-    const masterPassword = window.prompt("Create a strong Master Password. This cannot be recovered! Write it down.");
-    if (!masterPassword || masterPassword.length < 8) {
-      this.messageService.add({ severity: 'warn', summary: 'Password too short', detail: 'Master password must be at least 8 characters.' });
+    const masterPassword = window.prompt("Create a strong Master Password...");
+    if (!masterPassword || masterPassword.length < 8) { /* ... */ return; }
+
+    // CORRECTED: Get user ID from the 'sub' claim of the JWT
+    const userId = this.currentUser?.user?.userId;
+    const sessionToken = this.currentSession?.sessionToken;
+    if (!userId || !sessionToken) {
+      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'User session not found.' });
       return;
     }
-
     this.isLoading = true;
-    // 1. Generate new random Data Encryption Key (DEK)
     this.dataKey = bufferToBase64(crypto.getRandomValues(new Uint8Array(32)));
+    const { encryptedContent, iv, salt } = await this.cryptoService.encrypt(this.dataKey, masterPassword);
 
-    // 2. Encrypt the new DEK with the master password
-    const { encryptedContent, salt } = await this.cryptoService.encrypt(this.dataKey, masterPassword);
+    const dekToSave: EncryptedDekDbo = { user_id: userId, encrypted_dek: encryptedContent, iv, salt };
 
-    // 3. Save the encrypted DEK to the database
-    const dekToSave: EncryptedDekDbo = { encrypted_dek: encryptedContent, salt };
-    const { error } = await this.supabaseService.saveEncryptedDek(dekToSave);
+    const { error } = await this.supabaseService.saveEncryptedDek(sessionToken, dekToSave);
 
     if (error) {
       this.messageService.add({ severity: 'error', summary: 'Setup Failed', detail: 'Could not save your encrypted key.' });
@@ -158,54 +163,25 @@ export class NotesListComponent implements OnInit {
       await this.loadNotes();
     }
   }
-  /**
-   * This is now the single function to get a key and load notes.
-   * @param isInitialLoad - A flag to differentiate the first automatic prompt from user clicks.
-   */
-  async promptForKeyAndLoad(isInitialLoad = false): Promise<void> {
-    const promptMessage = isInitialLoad
-      ? "Please enter your encryption key to load notes:"
-      : "Please enter a new or existing encryption key:";
-
-    const password = window.prompt(promptMessage);
-
-    if (!password) {
-      this.messageService.add({ severity: 'warn', summary: 'Cancelled', detail: 'An encryption key is required.' });
-      // If it's the initial load and they cancel, stop the spinner.
-      if (isInitialLoad) {
-        this.isLoading = false;
-      }
-      return;
-    }
-
-    this.encryptionKey = password;
-
-    // Set loading state immediately before starting async work
-    this.isLoading = true;
-
-    // Use zone.run() to ensure the async operation and its state changes
-    // are properly tracked by Angular for change detection.
-    this.zone.run(async () => {
-      await this.loadNotes();
-    });
-  }
 
   async loadNotes(): Promise<void> {
-    if (!this.encryptionKey) {
-      this.isLoading = false; // Should not happen with the new flow, but good practice
+    const sessionToken = this.currentSession?.sessionToken;
+    if (!this.dataKey || !sessionToken) {
+      this.isLoading = false;
       return;
-    }
+    };
 
+    this.isLoading = true;
     try {
-      const dbNotes = await this.supabaseService.getNotes();
+      const dbNotes = await this.supabaseService.getNotes(sessionToken);
       const decryptedNotes: Note[] = [];
 
       for (const dbNote of dbNotes) {
         try {
-          const decrypted = await this.cryptoService.decrypt(dbNote.encrypted_content, dbNote.iv, dbNote.salt, this.encryptionKey);
+          const decrypted = await this.cryptoService.decrypt(dbNote.encrypted_content, dbNote.iv, dbNote.salt, this.dataKey);
           decryptedNotes.push({ id: dbNote.id!, ...JSON.parse(decrypted) });
         } catch (e) {
-          decryptedNotes.push({ id: dbNote.id!, title: 'Decryption Failed', content: 'Could not decrypt this note. Incorrect key?' });
+          decryptedNotes.push({ id: dbNote.id!, title: 'Decryption Failed', content: 'Could not decrypt note.' });
         }
       }
       this.notes = decryptedNotes;
@@ -213,16 +189,13 @@ export class NotesListComponent implements OnInit {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Could not load notes.' });
       this.notes = [];
     } finally {
-      this.isLoading = false; // This will now correctly trigger a UI update
+      this.isLoading = false;
     }
   }
 
-  // All other methods (showAddNoteDialog, saveNote, etc.) are now simpler
-  // because they can rely on the robust promptForKeyAndLoad function.
   showAddNoteDialog(): void {
-    if (!this.encryptionKey) {
-      this.messageService.add({ severity: 'warn', summary: 'Set Key First', detail: 'Please set the encryption key before adding a note.' });
-      this.promptForKeyAndLoad();
+    if (!this.dataKey) {
+      this.messageService.add({ severity: 'warn', summary: 'Setup Required', detail: 'Please set up your Master Password first.' });
       return;
     }
     this.currentNoteId = null;
@@ -230,8 +203,6 @@ export class NotesListComponent implements OnInit {
     this.displayDialog = true;
   }
 
-  // The rest of your methods (showEditNoteDialog, saveNote, confirmDelete)
-  // remain EXACTLY the same. They will correctly call the updated loadNotes().
   showEditNoteDialog(note: Note): void {
     this.currentNoteId = note.id;
     this.noteForm.setValue({ title: note.title, content: note.content });
@@ -239,41 +210,51 @@ export class NotesListComponent implements OnInit {
   }
 
   async saveNote(): Promise<void> {
-    if (this.noteForm.invalid) return;
+    if (this.noteForm.invalid || !this.dataKey || !this.currentSession?.sessionToken) return;
 
     this.isSaving = true;
     const { title, content } = this.noteForm.value;
     const noteContent = JSON.stringify({ title, content });
+    const userId = this.currentUser?.user?.userId;
+    const sessionToken = this.currentSession.sessionToken;
 
     try {
-      const { encryptedContent, iv, salt } = await this.cryptoService.encrypt(noteContent, this.encryptionKey);
-      const noteToSave: NoteDbo = { encrypted_content: encryptedContent, iv, salt };
+      const { encryptedContent, iv, salt } = await this.cryptoService.encrypt(noteContent, this.dataKey);
+
+      const noteToSave: NoteDbo = {
+        user_id: userId,
+        encrypted_content: encryptedContent,
+        iv,
+        salt
+      };
 
       if (this.currentNoteId) {
-        await this.supabaseService.updateNote(this.currentNoteId, noteToSave);
+        await this.supabaseService.updateNote(sessionToken, this.currentNoteId, noteToSave);
         this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Note updated!' });
       } else {
-        await this.supabaseService.addNote(noteToSave);
+        await this.supabaseService.addNote(sessionToken, noteToSave);
         this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Note added!' });
       }
       this.displayDialog = false;
       await this.loadNotes();
     } catch (error) {
-      console.error(error);
-      this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Could not save note.' });
+      this.messageService.add({ severity: 'error', summary: 'Save Failed', detail: 'Could not save the note.' });
     } finally {
       this.isSaving = false;
     }
   }
 
   confirmDelete(noteId: string): void {
+    const sessionToken = this.currentSession?.sessionToken;
+    if (!sessionToken) return;
+
     this.confirmationService.confirm({
       message: 'Are you sure you want to delete this note?',
       header: 'Delete Confirmation',
       icon: 'pi pi-exclamation-triangle',
       accept: async () => {
         try {
-          await this.supabaseService.deleteNote(noteId);
+          await this.supabaseService.deleteNote(sessionToken, noteId);
           this.messageService.add({ severity: 'info', summary: 'Confirmed', detail: 'Note deleted.' });
           await this.loadNotes();
         } catch(error) {
